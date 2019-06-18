@@ -280,5 +280,5 @@ def anomaly_scoring(checkpoint_dir, checkpoint_iter, dual_iloss=True):
 
 
 if __name__ == '__main__':
-    anomaly_scoring("path-to-'checkpoints'-folder-of-encoder-training", <checkpoint-iter>)
-    
+    # anomaly_scoring("path-to-'checkpoints'-folder-of-encoder-training", <checkpoint-iter>)
+    anomaly_scoring("wganTrain/wgangp_64x64_normal_crIt5_2019-06-10-1345/checkpoints", <checkpoint-iter>)

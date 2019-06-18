@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 Saving (array of) images to file.
 

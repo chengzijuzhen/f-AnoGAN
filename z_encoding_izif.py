@@ -365,4 +365,5 @@ def train_enc_izi(checkpoint_dir, checkpoint_iter, nr_valid_plt=9, nr_valid_btch
 
 
 if __name__ == '__main__':
-    train_enc_izi("path-to-'checkpoints'-folder-of-WGAN-training", <checkpoint-iter>, loss_type='MSE', kappa=1.0)
+    # train_enc_izi(checkpoint_dir, checkpoint_iter, nr_valid_plt=9, nr_valid_btchs=10, lr=5e-5, loss_type='MSE', kappa=1.0, denoise=None):
+    train_enc_izi("wganTrain/wgangp_64x64_normal_crIt5_2019-06-11-1112/checkpoints", <checkpoint-iter>, loss_type='MSE', kappa=1.0)

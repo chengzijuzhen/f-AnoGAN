@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Training of the WGAN-GP model
 
@@ -24,7 +25,8 @@ SOFTWARE.
 """
 
 
-import os, sys
+import os
+import sys
 import numpy as np
 import re
 sys.path.append(os.getcwd())
@@ -32,7 +34,7 @@ sys.path.append(os.getcwd())
 import tensorflow as tf
 import time
 import functools
-from tqdm import tqdm
+from tqdm import tqdm # 进度条 tqdm 库
 
 import tflib as lib
 import tflib.ops.linear
@@ -53,7 +55,7 @@ class bcolors:
     RED = '\033[91m'
     ENDC = '\033[0m'
 
-timestamp = time.strftime("%Y-%m-%d-%H%M")
+timestamp = time.strftime("%Y-%m-%d-%H%M")# 定义生成文件夹wganTrain的时间戳
 filename = os.path.basename(__file__).strip('.py')
 
 
@@ -71,51 +73,54 @@ ZSPACE_SMPL_NRIMG = 5
 ZSPACE_SMPL_PTS = 13
 checkpoint_iter = None
 
-
+# 跑一次程序，生成一个文件夹
 run_name = "%s_%s_crIt%d_%s" %(filename, RAND_SAMPLING, CRITIC_ITERS, timestamp)
 checkpoint_dir = os.path.join("wganTrain", run_name, "checkpoints")
 log_dir    = os.path.join("wganTrain", run_name, "logs")
 samples_dir  = os.path.join("wganTrain", run_name, "samples")
-z_interp_dir = os.path.join("wganTrain", run_name, "z_interp")
+z_interp_dira = os.path.join("wganTrain", run_name, "z_interp")
 
+print ("执行到这里～～～～")
 
 print bcolors.GREEN + "\n=== WGAN-GP TRAINING PARAMETERS ===" + bcolors.ENDC
 lib.print_model_settings(locals().copy())
 
 DEVICES = ['/gpu:{}'.format(i) for i in xrange(N_GPUS)]
+print ("执行到这里～～～～")
 
 
+# 归一化
 def Normalize(name, axes, inputs):
     if ('Discriminator' in name) and (MODE == 'wgan-gp'):
-        if axes != [0,2,3]:
+        if axes != [0, 2, 3]:
             raise Exception('Layernorm over non-standard axes is unsupported')
-        return lib.ops.layernorm.Layernorm(name,[1,2,3],inputs)
+        return lib.ops.layernorm.Layernorm(name, [1, 2, 3], inputs)
     else:
-        return lib.ops.batchnorm.Batchnorm(name,axes,inputs,fused=True)
+        return lib.ops.batchnorm.Batchnorm(name, axes, inputs, fused=True)
 
 def my_Normalize(name, inputs, is_training):
     if ('Discriminator' in name) and (MODE == 'wgan-gp'):
-        return lib.ops.layernorm.Layernorm(name,[1,2,3],inputs)
+        return lib.ops.layernorm.Layernorm(name, [1, 2, 3], inputs)
     else:
         return tf.layers.batch_normalization(inputs, axis=1, training=is_training, name=name)
 
 def ConvMeanPool(name, input_dim, output_dim, filter_size, inputs, he_init=True, biases=True):
     output = lib.ops.conv2d.Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=he_init, biases=biases)
-    output = tf.add_n([output[:,:,::2,::2], output[:,:,1::2,::2], output[:,:,::2,1::2], output[:,:,1::2,1::2]]) / 4.
+    output = tf.add_n([output[:, :, ::2, ::2], output[:, :, 1::2, ::2], output[:, :, ::2, 1::2], output[:, :, 1::2, 1::2]]) / 4.
     return output
 
 def MeanPoolConv(name, input_dim, output_dim, filter_size, inputs, he_init=True, biases=True):
     output = inputs
-    output = tf.add_n([output[:,:,::2,::2], output[:,:,1::2,::2], output[:,:,::2,1::2], output[:,:,1::2,1::2]]) / 4.
+    output = tf.add_n([output[:, :, ::2, ::2], output[:, :, 1::2, ::2], output[:, :, ::2, 1::2], output[:, :, 1::2, 1::2]]) / 4.
     output = lib.ops.conv2d.Conv2D(name, input_dim, output_dim, filter_size, output, he_init=he_init, biases=biases)
     return output
 
 def UpsampleConv(name, input_dim, output_dim, filter_size, inputs, he_init=True, biases=True):
     output = inputs
     output = tf.concat([output, output, output, output], 1)
-    output = tf.transpose(output, [0,2,3,1])
+    output = tf.transpose(output, [0, 2, 3, 1])
     output = tf.depth_to_space(output, 2)
-    output = tf.transpose(output, [0,3,1,2])
+    output = tf.transpose(output, [0, 3, 1, 2])
     output = lib.ops.conv2d.Conv2D(name, input_dim, output_dim, filter_size, output, he_init=he_init, biases=biases)
     return output
 
@@ -123,22 +128,22 @@ def ResidualBlock(name, input_dim, output_dim, filter_size, inputs, is_training=
     """
     resample: None, 'down', or 'up'
     """
-    if resample=='down':
+    if resample == 'down':
         conv_shortcut = MeanPoolConv
         conv_1        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim, output_dim=input_dim)
         conv_2        = functools.partial(ConvMeanPool, input_dim=input_dim, output_dim=output_dim)
-    elif resample=='up':
+    elif resample == 'up':
         conv_shortcut = UpsampleConv
         conv_1        = functools.partial(UpsampleConv, input_dim=input_dim, output_dim=output_dim)
         conv_2        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=output_dim, output_dim=output_dim)
-    elif resample==None:
+    elif resample == None:
         conv_shortcut = lib.ops.conv2d.Conv2D
         conv_1        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim,  output_dim=input_dim)
         conv_2        = functools.partial(lib.ops.conv2d.Conv2D, input_dim=input_dim, output_dim=output_dim)
     else:
         raise Exception('invalid resample value')
 
-    if output_dim==input_dim and resample==None:
+    if output_dim == input_dim and resample == None:
         shortcut = inputs # Identity skip-connection
     else:
         shortcut = conv_shortcut(name+'.Shortcut', input_dim=input_dim, output_dim=output_dim, filter_size=1,
@@ -221,14 +226,14 @@ def save(session, saver, checkpoint_dir, step):
                 global_step=step)
 
 
-def load(session, saver, checkpoint_dir, checkpoint_iter=None):
+def load(session, saver, checkpoint_dir, checkpoint_iter = None):
     print(" [*] Reading checkpoints...")
 
     ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
     if ckpt and ckpt.model_checkpoint_path:
         if checkpoint_iter is not None:
             last_ckpt_epoch = re.match(r'.*.model-(\d+)', ckpt.model_checkpoint_path).group(1)
-            target_ckpt_path = re.sub( last_ckpt_epoch, str(checkpoint_iter), ckpt.model_checkpoint_path)
+            target_ckpt_path = re.sub(last_ckpt_epoch, str(checkpoint_iter), ckpt.model_checkpoint_path)
             saver.restore(session, target_ckpt_path)
             idxx = target_ckpt_path.rfind('/')
             ckpt_name = target_ckpt_path[idxx+1:]
@@ -240,8 +245,10 @@ def load(session, saver, checkpoint_dir, checkpoint_iter=None):
     else:
         return False, ''
 
-
+# 训练函数
 def train():
+    print ("执行到这里～～～～")
+
     Generator, Discriminator = GoodGenerator, GoodDiscriminator
 
     for dir_path in [checkpoint_dir, log_dir, samples_dir, z_interp_dir]:
@@ -249,13 +256,14 @@ def train():
             os.makedirs(dir_path)
 
     with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
+        print ("执行到这里～～～～")
         all_real_data_conv = tf.placeholder(tf.int32, shape=[BATCH_SIZE, 1, 64, 64])
         if tf.__version__.startswith('1.'):
             split_real_data_conv = tf.split(all_real_data_conv, len(DEVICES))
-            print "\n\nDEVICES: %s\n\n" %DEVICES
+            print "\n\nDEVICES: %s\n\n" % DEVICES
         else:
             split_real_data_conv = tf.split(0, len(DEVICES), all_real_data_conv)
-        gen_costs, disc_costs = [],[]
+        gen_costs, disc_costs = [], []
 
         for device_index, (device, real_data_conv) in enumerate(zip(DEVICES, split_real_data_conv)):
             with tf.device(device):
@@ -270,7 +278,7 @@ def train():
                     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
                     alpha = tf.random_uniform(
-                        shape=[BATCH_SIZE/len(DEVICES),1], 
+                        shape=[BATCH_SIZE/len(DEVICES), 1],
                         minval=0.,
                         maxval=1.
                     )
@@ -287,6 +295,8 @@ def train():
         gen_cost = tf.add_n(gen_costs) / len(DEVICES)
         disc_cost = tf.add_n(disc_costs) / len(DEVICES)
 
+
+
         if MODE == 'wgan-gp':
             t_vars = tf.trainable_variables()
             gen_vars = [var for var in t_vars if 'Generator' in var.name]
@@ -302,7 +312,6 @@ def train():
             with tf.control_dependencies(update_ops_dis):
                 disc_train_op = tf.train.AdamOptimizer(learning_rate=1e-4, beta1=0., beta2=0.9).minimize(disc_cost,
                                                var_list=dis_vars, colocate_gradients_with_ops=True)
-
 
         # For generating samples
         if RAND_SAMPLING == 'unif':
@@ -355,7 +364,7 @@ def train():
             v_len_limes = v_len_max * v_len_lim
             v_len = 0
 
-            while v_len<v_len_limes:
+            while v_len < v_len_limes:
                 if RAND_SAMPLING == 'unif':
                     z_p1 = np.random.uniform(-1, 1, [1, z_dim]).astype(np.float32)
                     z_p2 = np.random.uniform(-1, 1, [1, z_dim]).astype(np.float32)
@@ -374,7 +383,7 @@ def train():
             return ((z_imgs+1.)*(255.99/2)).astype('int32')
 
 
-        saver = tf.train.Saver(max_to_keep=10)
+        saver = tf.train.Saver(max_to_keep = 10)
         session.run(tf.global_variables_initializer())
         isLoaded, ckpt = load(session, saver, checkpoint_dir, checkpoint_iter)
         start_iter = 0
@@ -386,18 +395,18 @@ def train():
             while iteration < ((epoch+1)*(nr_iters_per_epoch-CRITIC_ITERS)):
                 start_time = time.time()
 
-                ## -- TRAIN generator --
+                # -- TRAIN generator --
                 if (iteration+1) > 1:
                     _gen_cost, _ = session.run([gen_cost, gen_train_op])
 
-                ## -- TRAIN critic --
+                # -- TRAIN critic --
                 disc_iters = CRITIC_ITERS
                 for i in xrange(disc_iters):
                     _data = gen.next()
                     iteration += 1
                     _disc_cost, _ = session.run([disc_cost, disc_train_op], feed_dict={all_real_data_conv: _data})
 
-                ## -- LOGGING **
+                #  -- LOGGING **
                 lib.plot.tickit(iteration)
 
                 if (iteration == (3*disc_iters)) or (iteration % (100*disc_iters) == 0):
@@ -439,7 +448,8 @@ def train():
         print bcolors.BLUE + "\nSAVING CHECKPOINT" + bcolors.ENDC
         print bcolors.BLUE + "Training done!\n" + bcolors.ENDC
 
-
+# if __name__ == '__main__简单的理解就是，如果我们执行本模块，那么代码块被执行运行。
+# 如果被导入到其他模块，则处于name中的代码块不执行，这是一种编码习惯....
 if __name__ == '__main__':
     train()
 

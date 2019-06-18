@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Load images and provide splits (train_normal, test_normal, and test_anom(alous)) as arrays
 
@@ -22,8 +23,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-
-
 from glob import glob
 import numpy as np
 import os
@@ -31,15 +30,14 @@ import pdb
 import scipy.misc
 import time
 
-
-trainset_path     = "path-to-folder-holding-normal-training-images"
-trainset_val_path = "path-to-folder-holding-normal-validation-images"
-test_normal_path  = "path-to-folder-holding-normal-test-images"
-test_anom_path    = "path-to-folder-holding-anom-test-images"
-
+trainset_path     = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-training-test"
+trainset_val_path = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-validation"
+test_normal_path  = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-testing"
+test_anom_path    = "/home/kim/kuangyan/work/f-AnoGAN/image/anom-testing"
 
 def get_files(data_set):
         if data_set == 'train_normal':
+            # glob()方法返回所有匹配的文件路径列表（list）
             return glob(os.path.join(trainset_path, "*.png"))
         if data_set == 'valid_normal':
             return glob(os.path.join(trainset_val_path, "*.png"))
@@ -63,9 +61,8 @@ def get_nr_samples(data_set, batch_size):
     return nr_samples
 
 def get_nr_test_samples(batch_size):
-    return ( get_nr_samples('test_normal', batch_size),
-             get_nr_samples('test_anom', batch_size) 
-            )
+    return (get_nr_samples('test_normal', batch_size),
+             get_nr_samples('test_anom', batch_size))
 
 def make_generator(data_set, batch_size):
     epoch_count = [1]
@@ -80,9 +77,9 @@ def make_generator(data_set, batch_size):
         epoch_count[0] += 1
         for n, f in enumerate(files):
             image = scipy.misc.imread(f, mode='L')
-            if np.random.rand()>=0.5:
-                image = image[:,::-1]
-            images[n % batch_size] = np.expand_dims( image, 0)
+            if np.random.rand() >= 0.5:
+                image = image[:, ::-1]
+            images[n % batch_size] = np.expand_dims(image, 0)
             
             if n > 0 and n % batch_size == 0:
                 yield (images,)
@@ -99,12 +96,12 @@ def make_ad_generator(data_set, batch_size):
 
         for n, f in enumerate(files):
             image = scipy.misc.imread(f, mode='L')
-            images[n % batch_size] = np.expand_dims( image, 0)
+            images[n % batch_size] = np.expand_dims(image, 0)
 
             if (n+1) % batch_size == 0:
                 yield (images,)
-            elif (n+1)==nr_files:
-                final_btchsz = (n%batch_size)+1
+            elif (n+1) == nr_files:
+                final_btchsz = (n % batch_size)+1
                 yield (images[:final_btchsz],)
     return get_epoch
 
@@ -115,7 +112,7 @@ def load(batch_size, run_type):
             make_generator('train_normal', batch_size),
             make_generator('valid_normal', batch_size)
         )
-    elif run_type=='anomaly_score':
+    elif run_type == 'anomaly_score':
         return (
             make_ad_generator('test_normal', batch_size),
             make_ad_generator('test_anom', batch_size)
@@ -126,7 +123,7 @@ if __name__ == '__main__':
     train_gen, valid_gen = load(16, 'encoder_train')
     t0 = time.time()
     for n, batch in enumerate(train_gen(), start=1):
-        print "{}\t{}".format(str(time.time() - t0), batch[0][0,0,0,0])
+        print "{}\t{}".format(str(time.time() - t0), batch[0][0, 0, 0, 0])
         if n == 1000:
             break
         t0 = time.time()
