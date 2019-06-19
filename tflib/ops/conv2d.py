@@ -80,7 +80,6 @@ def Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=True, mask_
                             j::mask_n_channels
                         ] = 0.
 
-
         def uniform(stdev, size):
             return np.random.uniform(
                 low=-stdev * np.sqrt(3),
@@ -116,7 +115,7 @@ def Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=True, mask_
 
         filters = lib.param(name+'.Filters', filter_values)
 
-        if weightnorm==None:
+        if weightnorm == None:
             weightnorm = _default_weightnorm
         if weightnorm:
             norm_values = np.sqrt(np.sum(np.square(filter_values), axis=(0,1,2)))
@@ -155,6 +154,5 @@ def Conv2D(name, input_dim, output_dim, filter_size, inputs, he_init=True, mask_
             )
 
             result = tf.nn.bias_add(result, _biases, data_format='NCHW')
-
 
         return result

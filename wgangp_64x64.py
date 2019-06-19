@@ -176,8 +176,8 @@ def GoodGenerator(n_samples, noise=None, rand_sampling=RAND_SAMPLING, dim=DIM, n
     # 在训练期间，你希望通过梯度下降在每个步骤更新参数；
     # 但在评估时，你希望保持参数不变，并将大量不同的测试集输入模型。
     # 通常，模型所有可训练参数都是变量。
-
-    with tf.variable_scope('Generator', reuse=reuse):
+    # with tf.variable_scope('Generator', reuse=reuse):
+    with tf.variable_scope('Generator', reuse=tf.AUTO_REUSE):
         if noise is None:
             if rand_sampling == 'unif': # 均匀
                 noise = tf.random_uniform([n_samples, ZDIM], minval=-1., maxval=1.)
@@ -383,7 +383,7 @@ def train():
 
         # EVALUATION: z-interpolation ******
         eval_query_noise = tf.placeholder(tf.float32, shape=[ZSPACE_SMPL_PTS, ZDIM])
-        zeval_gen_imgs = Generator(ZSPACE_SMPL_PTS, noise=eval_query_noise, rand_sampling=RAND_SAMPLING, is_training=False, reuse=True )
+        zeval_gen_imgs = Generator(ZSPACE_SMPL_PTS, noise=eval_query_noise, rand_sampling=RAND_SAMPLING, is_training=False, reuse=True)
 
         def get_z_interpolations(smpl_pts, z_dim=ZDIM, v_len_lim=0.5):
             z_samples = np.zeros((smpl_pts, z_dim), dtype=np.float32)
@@ -449,7 +449,7 @@ def train():
                     lib.plot.flush(log_dir)
 
                     total_samples_seen = iteration * BATCH_SIZE
-                    if (epoch+1)==1:
+                    if (epoch+1) == 1:
                         nr_samples_within_epoch = total_samples_seen
                     else:
                         nr_samples_within_epoch = np.mod(total_samples_seen, epoch*(nr_iters_per_epoch-CRITIC_ITERS))
