@@ -60,7 +60,7 @@ filename = os.path.basename(__file__).strip('.py')
 
 
 MODE = 'wgan-gp'
-RAND_SAMPLING = 'normal' # 'unif'
+RAND_SAMPLING = 'normal' # 'unif' 随机采样方式选择
 DIM = 64 # Model dimensionality
 CRITIC_ITERS = 5
 N_GPUS = 1
@@ -74,28 +74,33 @@ ZSPACE_SMPL_PTS = 13
 checkpoint_iter = None
 
 # 跑一次程序，生成一个文件夹
-run_name = "%s_%s_crIt%d_%s" %(filename, RAND_SAMPLING, CRITIC_ITERS, timestamp)
+run_name = "%s_%s_crIt%d_%s" % (filename, RAND_SAMPLING, CRITIC_ITERS, timestamp)
 checkpoint_dir = os.path.join("wganTrain", run_name, "checkpoints")
 log_dir    = os.path.join("wganTrain", run_name, "logs")
 samples_dir  = os.path.join("wganTrain", run_name, "samples")
-z_interp_dira = os.path.join("wganTrain", run_name, "z_interp")
+z_interp_dir = os.path.join("wganTrain", run_name, "z_interp")
 
 print ("执行到这里～～～～")
 
 print bcolors.GREEN + "\n=== WGAN-GP TRAINING PARAMETERS ===" + bcolors.ENDC
 lib.print_model_settings(locals().copy())
 
-DEVICES = ['/gpu:{}'.format(i) for i in xrange(N_GPUS)]
-print ("执行到这里～～～～")
+# DEVICES = ['/gpu:{}'.format(i) for i in xrange(N_GPUS)]
 
+DEVICES = ['/gpu:0', '/gpu:1']
+# DEVICES = ['/cpu:0']
+print ("len(DEVICES):", len(DEVICES))
+print (DEVICES)
 
 # 归一化
 def Normalize(name, axes, inputs):
     if ('Discriminator' in name) and (MODE == 'wgan-gp'):
         if axes != [0, 2, 3]:
             raise Exception('Layernorm over non-standard axes is unsupported')
+        # 层归一化
         return lib.ops.layernorm.Layernorm(name, [1, 2, 3], inputs)
     else:
+        # 批量归一化
         return lib.ops.batchnorm.Batchnorm(name, axes, inputs, fused=True)
 
 def my_Normalize(name, inputs, is_training):
@@ -153,7 +158,7 @@ def ResidualBlock(name, input_dim, output_dim, filter_size, inputs, is_training=
     if is_training is not None:
         output = my_Normalize(name+'.BN1', output, is_training)
     else:
-        output = Normalize(name+'.BN1', [0,2,3], output)
+        output = Normalize(name+'.BN1', [0, 2, 3], output)
     output = tf.nn.relu(output)
     output = conv_1(name+'.Conv1', filter_size=filter_size, inputs=output, he_init=he_init, biases=False)
     if is_training is not None:
@@ -167,11 +172,16 @@ def ResidualBlock(name, input_dim, output_dim, filter_size, inputs, is_training=
 
 
 def GoodGenerator(n_samples, noise=None, rand_sampling=RAND_SAMPLING, dim=DIM, nonlinearity=tf.nn.relu, z_out=False, is_training=True, reuse=None):
+    # 变量对于使用 TensorFlow 进行深度学习是至关重要的，因为模型的参数就是变量。
+    # 在训练期间，你希望通过梯度下降在每个步骤更新参数；
+    # 但在评估时，你希望保持参数不变，并将大量不同的测试集输入模型。
+    # 通常，模型所有可训练参数都是变量。
+
     with tf.variable_scope('Generator', reuse=reuse):
         if noise is None:
-            if rand_sampling == 'unif':
+            if rand_sampling == 'unif': # 均匀
                 noise = tf.random_uniform([n_samples, ZDIM], minval=-1., maxval=1.)
-            elif rand_sampling == 'normal':
+            elif rand_sampling == 'normal': # 正态
                 noise = tf.random_normal([n_samples, ZDIM])
 
         output = lib.ops.linear.Linear('Generator.Input', ZDIM, 4*4*8*dim, noise)
@@ -215,21 +225,20 @@ def GoodDiscriminator(inputs, dim=DIM, is_training=False, reuse=None, out_feats=
     else:
         return tf.reshape(output, [-1])
 
-
+# 深度学习中，模型训练一般都需要很长的时间，由于很多原因，导致模型中断训练，下面是继续断点训练的方法：save（）和load（）。
+# 保存变量
 def save(session, saver, checkpoint_dir, step):
-    print(" [*] Saving checkpoint (step %d) ..." %step)
+    print(" [*] Saving checkpoint (step %d) ..." % step)
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
 
-    saver.save( session,
-                os.path.join(checkpoint_dir, "%s.model" %MODE),
-                global_step=step)
+    saver.save(session, os.path.join(checkpoint_dir, "%s.model" % MODE), global_step=step)# 这里的step是循环训练的次数，也就是第几次迭代
 
 
-def load(session, saver, checkpoint_dir, checkpoint_iter = None):
+def load(session, saver, checkpoint_dir, checkpoint_iter=None):
     print(" [*] Reading checkpoints...")
 
-    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)# 注意此处是checkpoint存在的目录
     if ckpt and ckpt.model_checkpoint_path:
         if checkpoint_iter is not None:
             last_ckpt_epoch = re.match(r'.*.model-(\d+)', ckpt.model_checkpoint_path).group(1)
@@ -238,7 +247,7 @@ def load(session, saver, checkpoint_dir, checkpoint_iter = None):
             idxx = target_ckpt_path.rfind('/')
             ckpt_name = target_ckpt_path[idxx+1:]
         else:
-            saver.restore(session, ckpt.model_checkpoint_path)
+            saver.restore(session, ckpt.model_checkpoint_path)# 自动恢复model_checkpoint_path保存模型一般是最新
             idxx = ckpt.model_checkpoint_path.rfind('/')
             ckpt_name = ckpt.model_checkpoint_path[idxx+1:]
         return True, ckpt_name
@@ -255,18 +264,35 @@ def train():
         if not os.path.isdir(dir_path):
             os.makedirs(dir_path)
 
+    # 自动选择运行设备 ： tf.ConfigProto(allow_soft_placement=True)
+    # 在tf中，通过命令 "with tf.device('/cpu:0'):",允许手动设置操作运行的设备。
+    # 如果手动设置的设备不存在或者不可用，就会导致tf程序等待或异常，
+    # 为了防止这种情况，可以设置tf.ConfigProto()中参数allow_soft_placement=True，允许tf自动选择一个存在并且可用的设备来运行操作。
+
     with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as session:
         print ("执行到这里～～～～")
+
+        # placeholder：占位符，用来接收外部输入的节点
         all_real_data_conv = tf.placeholder(tf.int32, shape=[BATCH_SIZE, 1, 64, 64])
-        if tf.__version__.startswith('1.'):
-            split_real_data_conv = tf.split(all_real_data_conv, len(DEVICES))
-            print "\n\nDEVICES: %s\n\n" % DEVICES
+
+        # Python startswith() 方法用于检查字符串是否是以指定子字符串开头，如果是则返回 True，否则返回 False。
+        # 如果参数 beg 和 end 指定值，则在指定范围内检查。
+        if tf.__version__.startswith('1.'): # tf的版本号是1.x开头的，我这里用的是'1.10.0'
+            # 把一个张量划分成几个子张量
+            split_real_data_conv = tf.split(all_real_data_conv, len(DEVICES))# len(DEVICES) 准备切成几份
+            print ("\n\nDEVICES: %s\n\n"%DEVICES)
         else:
             split_real_data_conv = tf.split(0, len(DEVICES), all_real_data_conv)
+
         gen_costs, disc_costs = [], []
 
+        # zip 将对象中对应的元素打包成一个个元组，然后返回由这些元组组成的列表。
+        # enumerate() 函数用于将一个可遍历的数据对象(如列表、元组或字符串)组合为一个索引序列，同时列出数据和数据下标，一般用在 for 循环当中。
         for device_index, (device, real_data_conv) in enumerate(zip(DEVICES, split_real_data_conv)):
+            # with tf.device('/cpu:0'): 指定使用GPU或CPU
             with tf.device(device):
+                # tf.cast()函数的作用是执行 tensorflow 中张量数据类型转换，比如读入的图片如果是int8类型的，一般在要在训练前把图像的数据格式转换为float32。
+                # tf.reshape()为了功能改变张量（tensor）的形状。shape传入一个向量，代表新tensor的维度数和每个维度的长度。
                 real_data = tf.reshape(2*((tf.cast(real_data_conv, tf.float32)/255.)-.5), [BATCH_SIZE/len(DEVICES), OUTPUT_DIM])
                 fake_data = Generator(BATCH_SIZE/len(DEVICES), rand_sampling=RAND_SAMPLING, is_training=True)
 
@@ -274,6 +300,7 @@ def train():
                 disc_fake = Discriminator(fake_data, reuse=True, out_feats=False)
 
                 if MODE == 'wgan-gp':
+                    # tf.reduce_mean 计算tensor（图像）的平均值。
                     gen_cost = -tf.reduce_mean(disc_fake)
                     disc_cost = tf.reduce_mean(disc_fake) - tf.reduce_mean(disc_real)
 
@@ -283,19 +310,23 @@ def train():
                         maxval=1.
                     )
                     differences = fake_data - real_data
-                    interpolates = real_data + (alpha*differences)
-                    gradients = tf.gradients(Discriminator(interpolates, reuse=True, out_feats=False), [interpolates])[0]
-                    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-                    gradient_penalty = tf.reduce_mean((slopes-1.)**2)
-                    disc_cost += LAMBDA*gradient_penalty
 
+                    interpolates = real_data + (alpha*differences)
+
+                    gradients = tf.gradients(Discriminator(interpolates, reuse=True, out_feats=False), [interpolates])[0]
+
+                    slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+
+                    gradient_penalty = tf.reduce_mean((slopes-1.)**2)
+
+                    disc_cost += LAMBDA * gradient_penalty
+
+                # Python列表append()方法用于将传入的对象附加(添加)到现有列表中。
                 gen_costs.append(gen_cost)
                 disc_costs.append(disc_cost)
 
         gen_cost = tf.add_n(gen_costs) / len(DEVICES)
         disc_cost = tf.add_n(disc_costs) / len(DEVICES)
-
-
 
         if MODE == 'wgan-gp':
             t_vars = tf.trainable_variables()
@@ -333,9 +364,8 @@ def train():
             samples = ((samples+1.)*(255.99/2)).astype('int32')
             lib.save_images.save_images(samples.reshape((BATCH_SIZE, 1, 64, 64)), '{}/samples_epoch{}-{}.png'.format(samples_dir, epoch, iteration))
 
-
         # Dataset iterator
-        train_gen,_ = lib.img_loader.load(BATCH_SIZE, 'wgan_train')
+        train_gen, _ = lib.img_loader.load(BATCH_SIZE, 'wgan_train')
 
         nr_training_samples = lib.img_loader.get_nr_training_samples(BATCH_SIZE)
         nr_iters_per_epoch = nr_training_samples//BATCH_SIZE
@@ -351,7 +381,6 @@ def train():
         _x_r = ((_x_r+1.)*(255.99/2)).astype('int32')
         lib.save_images.save_images(_x_r.reshape((BATCH_SIZE/N_GPUS, 1, 64, 64)), '{}/samples_groundtruth.png'.format(samples_dir))
 
-
         # EVALUATION: z-interpolation ******
         eval_query_noise = tf.placeholder(tf.float32, shape=[ZSPACE_SMPL_PTS, ZDIM])
         zeval_gen_imgs = Generator(ZSPACE_SMPL_PTS, noise=eval_query_noise, rand_sampling=RAND_SAMPLING, is_training=False, reuse=True )
@@ -359,8 +388,8 @@ def train():
         def get_z_interpolations(smpl_pts, z_dim=ZDIM, v_len_lim=0.5):
             z_samples = np.zeros((smpl_pts, z_dim), dtype=np.float32)
 
-            v_max = np.ones((1,100))*2  # *2 ... => 2 = [-1..1] 
-            v_len_max = np.sqrt( (v_max**2).sum() ) # vector_length of v_max
+            v_max = np.ones((1, 100))*2  # *2 ... => 2 = [-1..1]
+            v_len_max = np.sqrt((v_max**2).sum()) # vector_length of v_max
             v_len_limes = v_len_max * v_len_lim
             v_len = 0
 
@@ -373,17 +402,16 @@ def train():
                     z_p2 = np.random.normal(size=(1, ZDIM)).astype('float32')
 
                 v = z_p2 - z_p1
-                v_len = np.sqrt( (v**2).sum() ) # vector_length of v
+                v_len = np.sqrt((v**2).sum()) # vector_length of v
 
             steps = np.linspace(0., 1., smpl_pts)
-            for i,s in enumerate(steps):
+            for i, s in enumerate(steps):
                 z_samples[i, :] = z_p1 + s*v
 
             z_imgs = session.run(zeval_gen_imgs, feed_dict={eval_query_noise: z_samples})
             return ((z_imgs+1.)*(255.99/2)).astype('int32')
 
-
-        saver = tf.train.Saver(max_to_keep = 10)
+        saver = tf.train.Saver(max_to_keep=10)
         session.run(tf.global_variables_initializer())
         isLoaded, ckpt = load(session, saver, checkpoint_dir, checkpoint_iter)
         start_iter = 0
@@ -414,11 +442,10 @@ def train():
                     lib.plot.plot('train gen cost', _gen_cost)
                     lib.plot.plot('time', time.time() - start_time)
 
-                if (iteration == (10*disc_iters)) or (iteration == (100*disc_iters)) or ( iteration % (1000*disc_iters) == 0):
+                if (iteration == (10*disc_iters)) or (iteration == (100*disc_iters)) or (iteration % (1000*disc_iters) == 0):
                     generate_image(epoch+1, iteration)
 
-
-                if (iteration < 10) or ( iteration % (100*disc_iters) == 0):
+                if (iteration < 10) or (iteration % (100*disc_iters) == 0):
                     lib.plot.flush(log_dir)
 
                     total_samples_seen = iteration * BATCH_SIZE
@@ -428,16 +455,16 @@ def train():
                         nr_samples_within_epoch = np.mod(total_samples_seen, epoch*(nr_iters_per_epoch-CRITIC_ITERS))
                     
                     print bcolors.GREEN + "\tSaw real samples of %d full epochs and %10d additinal samples .. " \
-                                            %(epoch, nr_samples_within_epoch) + \
-                                            "(%.3f%% of epoch done!)" \
-                                            %(float(nr_samples_within_epoch)/nr_training_samples) + bcolors.ENDC
+                          %(epoch, nr_samples_within_epoch) + \
+                                "(%.3f%% of epoch done!)" \
+                                    %(float(nr_samples_within_epoch)/nr_training_samples) + bcolors.ENDC
 
-                if (iteration == (100*disc_iters)) or (iteration==(start_iter+(1000*disc_iters))) or (iteration % (1000*disc_iters) == 0):
-                    z_imgs_out = np.zeros((ZSPACE_SMPL_PTS,64*ZSPACE_SMPL_NRIMG,64), dtype=np.int32)
+                if (iteration == (100*disc_iters)) or (iteration == (start_iter+(1000*disc_iters))) or (iteration % (1000*disc_iters) == 0):
+                    z_imgs_out = np.zeros((ZSPACE_SMPL_PTS, 64*ZSPACE_SMPL_NRIMG,64), dtype=np.int32)
                     for _zi in range(ZSPACE_SMPL_NRIMG):
-                        z_space_smpls = get_z_interpolations( ZSPACE_SMPL_PTS )
-                        z_imgs_out[:,_zi*64:(_zi+1)*64,:] = z_space_smpls.reshape(ZSPACE_SMPL_PTS,64,64)
-                    lib.save_images.save_images_as_row( z_imgs_out, os.path.join(z_interp_dir, 'z_smpls-epoch%d-%05d.png'%(epoch+1, iteration)) )
+                        z_space_smpls = get_z_interpolations(ZSPACE_SMPL_PTS)
+                        z_imgs_out[:, _zi*64:(_zi+1)*64, :] = z_space_smpls.reshape(ZSPACE_SMPL_PTS, 64, 64)
+                    lib.save_images.save_images_as_row(z_imgs_out, os.path.join(z_interp_dir, 'z_smpls-epoch%d-%05d.png' % (epoch+1, iteration)) )
 
             print bcolors.BLUE + "\nEND OF EPOCH - SAVING CHECKPOINT\n" + bcolors.ENDC
             save(session, saver, checkpoint_dir, epoch+1)

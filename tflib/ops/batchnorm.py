@@ -22,13 +22,12 @@ SOFTWARE.
 
 
 import tflib as lib
-
 import numpy as np
 import tensorflow as tf
 
 def Batchnorm(name, axes, inputs, is_training=None, stats_iter=None, update_moving_stats=True, fused=True):
-    if ((axes == [0,2,3]) or (axes == [0,2])) and fused==True:
-        if axes==[0,2]:
+    if ((axes == [0, 2, 3]) or (axes == [0, 2])) and fused == True:
+        if axes == [0, 2]:
             inputs = tf.expand_dims(inputs, 3)
         # Old (working but pretty slow) implementation:
         ##########
@@ -51,6 +50,7 @@ def Batchnorm(name, axes, inputs, is_training=None, stats_iter=None, update_movi
 
         def _fused_batch_norm_training():
             return tf.nn.fused_batch_norm(inputs, scale, offset, epsilon=1e-5, data_format='NCHW')
+
         def _fused_batch_norm_inference():
             # Version which blends in the current item's statistics
             batch_size = tf.cast(tf.shape(inputs)[0], 'float32')
@@ -79,6 +79,7 @@ def Batchnorm(name, axes, inputs, is_training=None, stats_iter=None, update_movi
                                                        _fused_batch_norm_inference)
             if update_moving_stats:
                 no_updates = lambda: outputs
+
                 def _force_updates():
                     """Internal function forces updates moving_vars if is_training."""
                     float_stats_iter = tf.cast(stats_iter, tf.float32)
@@ -105,6 +106,5 @@ def Batchnorm(name, axes, inputs, is_training=None, stats_iter=None, update_movi
         offset = lib.param(name+'.offset', np.zeros(shape, dtype='float32'))
         scale = lib.param(name+'.scale', np.ones(shape, dtype='float32'))
         result = tf.nn.batch_normalization(inputs, mean, var, offset, scale, 1e-5)
-
 
         return result

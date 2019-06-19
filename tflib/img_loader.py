@@ -30,7 +30,7 @@ import pdb
 import scipy.misc
 import time
 
-trainset_path     = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-training-test"
+trainset_path     = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-training"
 trainset_val_path = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-validation"
 test_normal_path  = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-testing"
 test_anom_path    = "/home/kim/kuangyan/work/f-AnoGAN/image/anom-testing"
