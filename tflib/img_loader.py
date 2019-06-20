@@ -36,7 +36,7 @@ import time
 import numpy as np
 
 
-trainset_path     = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-training-test"
+trainset_path     = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-training-t3"
 trainset_val_path = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-validation"
 test_normal_path  = "/home/kim/kuangyan/work/f-AnoGAN/image/normal-testing"
 test_anom_path    = "/home/kim/kuangyan/work/f-AnoGAN/image/anom-testing"
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     print("here1")
     train_gen, valid_gen = load(16, 'encoder_train')
     t0 = time.time()
-
+    print t0
     # lena = mpimg.imread('/home/kim/kuangyan/work/f-AnoGAN/image/normal-training/000.png')# 读取和代码处于同一目录下的 lena.png
     # # 此时 lena 就已经是一个 np.array 了，可以对它进行任意处理
     # lena.shape # (64, 64, 1)

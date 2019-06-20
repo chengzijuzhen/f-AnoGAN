@@ -85,9 +85,9 @@ print ("执行到这里～～～～")
 print bcolors.GREEN + "\n=== WGAN-GP TRAINING PARAMETERS ===" + bcolors.ENDC
 lib.print_model_settings(locals().copy())
 
-# DEVICES = ['/gpu:{}'.format(i) for i in xrange(N_GPUS)]
+DEVICES = ['/gpu:{}'.format(i) for i in xrange(N_GPUS)]
 
-DEVICES = ['/gpu:0', '/gpu:1']
+# DEVICES = ['/gpu:0', '/gpu:1']
 # DEVICES = ['/cpu:0']
 print ("len(DEVICES):", len(DEVICES))
 print (DEVICES)
